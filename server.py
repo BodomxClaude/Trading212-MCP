@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Trading 212 MCP Server — SSE transport (Docker-hosted).
+Trading 212 MCP Server — Docker-hosted.
 
 Exposes:
-  GET  /sse        — MCP SSE connection endpoint
+  POST /mcp        — MCP Streamable HTTP endpoint, stateless
+  GET  /sse        — MCP SSE connection endpoint (legacy transport)
   POST /messages/  — MCP message endpoint (used by SSE transport internally)
   GET  /health     — liveness check
 
@@ -47,8 +48,8 @@ async def call_tool(
 ) -> types.CallToolResult:
     try:
         # dispatch() is blocking and may sit in the rate limiter's queue for a
-        # while, so keep it off the event loop and out of the way of other SSE
-        # sessions.
+        # while, so keep it off the event loop and out of the way of other
+        # requests.
         result = await anyio.to_thread.run_sync(
             functools.partial(tools.dispatch, params.name, params.arguments or {})
         )
@@ -97,19 +98,33 @@ async def health(request: Request):
     return JSONResponse({"status": "ok", "environment": "live" if client.LIVE else "demo"})
 
 
-app = Starlette(
-    routes=[
-        Route("/sse", endpoint=handle_sse),
-        Mount("/messages", app=sse.handle_post_message),
-        Route("/health", endpoint=health),
-    ]
-)
+SERVER_HOST = os.environ.get("SERVER_HOST", "0.0.0.0")
+
+
+def build_app(host: str = SERVER_HOST) -> Starlette:
+    # stateless_http drops session tracking, so a client may POST tools/list or
+    # tools/call without an initialize handshake and without Mcp-Session-Id.
+    #
+    # host is forwarded because the SDK auto-enables DNS-rebinding protection
+    # when it is left at the 127.0.0.1 default, which allows only localhost
+    # Host headers and rejects every request that arrives by container IP.
+    return mcp_server.streamable_http_app(
+        stateless_http=True,
+        host=host,
+        custom_starlette_routes=[
+            Route("/sse", endpoint=handle_sse),
+            Mount("/messages", app=sse.handle_post_message),
+            Route("/health", endpoint=health),
+        ],
+    )
+
+
+app = build_app()
 
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    host = os.environ.get("SERVER_HOST", "0.0.0.0")
     port = int(os.environ.get("SERVER_PORT", "8000"))
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=SERVER_HOST, port=port)

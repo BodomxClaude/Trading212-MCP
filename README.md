@@ -1,8 +1,8 @@
 # Trading 212 MCP Server
 
 An MCP (Model Context Protocol) server for the [Trading 212 Public API](https://docs.trading212.com/api),
-packaged as a Docker container with an SSE transport for hosting on [Obot](https://obot.ai)
-(or any MCP host that speaks SSE).
+packaged as a Docker container for hosting on [Obot](https://obot.ai) or any MCP host
+that speaks Streamable HTTP or SSE.
 
 It exposes the account, instruments, orders, history and pies endpoints as MCP tools.
 
@@ -72,7 +72,9 @@ docker run -p 8000:8000 \
 
 The server then exposes:
 
-- `GET /sse` — MCP SSE connection endpoint (point your MCP host here)
+- `POST /mcp` — MCP Streamable HTTP endpoint, stateless: no `initialize` handshake and no
+  `Mcp-Session-Id` needed (point your MCP host here; Obot v0.27.0+ requires it)
+- `GET /sse` — MCP SSE connection endpoint (legacy transport, still served)
 - `POST /messages/` — MCP message endpoint (used internally by the SSE transport)
 - `GET /health` — liveness check (reports the active environment)
 
@@ -135,7 +137,7 @@ Consequences worth knowing:
 - Because the queue is strictly in order, a slow call holds up the ones behind
   it. Fine at this server's traffic; it is the trade-off that makes the
   guarantee simple.
-- Waits happen on a worker thread, so the SSE transport and `/health` stay
+- Waits happen on a worker thread, so other requests and `/health` stay
   responsive throughout.
 - A `429` that slips through anyway (another client on the same account) holds
   that endpoint back for the interval in `Retry-After` / `x-ratelimit-reset` and
