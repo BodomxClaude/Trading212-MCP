@@ -21,7 +21,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
-include = ["server.py", "client.py", "ratelimit.py", "tools/"]
+include = ["server.py", "client.py", "ratelimit.py", "auth.py", "tools/"]
 
 [build-system]
 requires = ["hatchling"]

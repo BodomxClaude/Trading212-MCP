@@ -11,7 +11,7 @@ WORKDIR /app
 
 # Install only production deps from pyproject.toml [project.dependencies]
 COPY pyproject.toml README.md ./
-COPY server.py client.py ratelimit.py ./
+COPY server.py client.py ratelimit.py auth.py ./
 COPY tools/ tools/
 RUN pip install --no-cache-dir .
 

@@ -28,6 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
+import auth
 import client
 import tools
 
@@ -126,5 +127,9 @@ app = build_app()
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("SERVER_PORT", "8000"))
-    uvicorn.run(app, host=SERVER_HOST, port=port)
+    # Cloud Run passes the port in PORT; SERVER_PORT stays for Docker setups.
+    port = int(os.environ.get("PORT") or os.environ.get("SERVER_PORT", "8000"))
+    # Every MCP endpoint requires an OAuth token (see auth.py). The server
+    # refuses to start without MCP_LOGIN_PASSWORD.
+    protected = auth.protect(app, environment_label="LIVE – Echtgeld" if client.LIVE else "Demo – Übungsgeld")
+    uvicorn.run(protected, host=SERVER_HOST, port=port, proxy_headers=True, forwarded_allow_ips="*")
