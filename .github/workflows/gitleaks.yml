@@ -1,0 +1,46 @@
+name: gitleaks
+
+on:
+  pull_request:
+    branches: [main]
+  # main has no ruleset, so commits can land without a PR; this scans them after the fact.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitleaks-${{ github.event.pull_request.number || github.ref }}
+  # Never cancel a main scan; a superseded PR run is safe to drop.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$tarball" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan working tree
+        run: gitleaks dir . --redact --no-banner --config .gitleaks.toml
+
+      # A secret committed and then removed is gone from the tree but not from history.
+      # Fails closed if BASE_SHA is unreachable (a rewritten main); that red is not a leak.
+      - name: Scan new commits
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: gitleaks git . --redact --no-banner --config .gitleaks.toml --log-opts="${BASE_SHA}..HEAD"

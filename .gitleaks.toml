@@ -1,0 +1,16 @@
+title = "Trading212-MCP gitleaks config"
+
+[extend]
+useDefault = true
+
+# tests/test_client.py:83 reloads client with a dummy key/secret pair to assert the
+# Basic auth header. `generic-api-key` reads the adjacent env var *name*
+# ("TRADING212_API_SECRET") as the secret value. Scoped to that one rule, that one
+# file, and that one literal string — a real credential in the same file still fails.
+[[allowlists]]
+description = "generic-api-key matches the env var name in the Basic auth test fixture"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''(^|/)tests/test_client\.py$''']
+regexTarget = "secret"
+regexes = ['''^TRADING212_API_SECRET$''']
